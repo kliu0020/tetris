@@ -16,94 +16,10 @@ import "./style.css";
 
 import { fromEvent, interval, merge } from "rxjs";
 import { map, filter, scan } from "rxjs/operators";
-
-/** Constants */
-
-/**
- * Determines the game's size
- */
-const Viewport = {
-  CANVAS_WIDTH: 200,
-  CANVAS_HEIGHT: 400,
-  PREVIEW_WIDTH: 160,
-  PREVIEW_HEIGHT: 80,
-} as const;
-
-const Constants = {
-  TICK_RATE_MS: 500,
-  GRID_WIDTH: 10,
-  GRID_HEIGHT: 20,
-} as const;
-
-const Block = {
-  WIDTH: Viewport.CANVAS_WIDTH / Constants.GRID_WIDTH,
-  HEIGHT: Viewport.CANVAS_HEIGHT / Constants.GRID_HEIGHT,
-};
-
-/** User input */
-
-type Key = "KeyS" | "KeyA" | "KeyD";
-
-type Event = "keydown" | "keyup" | "keypress";
-
-/** Utility functions */
-
-/** State processing */
-
-type State = Readonly<{
-  gameEnd: boolean;
-}>;
-
-const initialState: State = {
-  gameEnd: false,
-} as const;
-
-/**
- * Updates the state by proceeding with one time step.
- *
- * @param s Current state
- * @returns Updated state
- */
-const tick = (s: State) => s;
-
-/** Rendering (side effects) */
-
-/**
- * Displays a SVG element on the canvas. Brings to foreground.
- * @param elem SVG element to display
- */
-const show = (elem: SVGGraphicsElement) => {
-  elem.setAttribute("visibility", "visible");
-  elem.parentNode!.appendChild(elem);
-};
-
-/**
- * Hides a SVG element on the canvas.
- * @param elem SVG element to hide
- */
-const hide = (elem: SVGGraphicsElement) =>
-  elem.setAttribute("visibility", "hidden");
-
-/**
- * Creates an SVG element with the given properties.
- *
- * See https://developer.mozilla.org/en-US/docs/Web/SVG/Element for valid
- * element names and properties.
- *
- * @param namespace Namespace of the SVG element
- * @param name SVGElement name
- * @param props Properties to set on the SVG element
- * @returns SVG element
- */
-const createSvgElement = (
-  namespace: string | null,
-  name: string,
-  props: Record<string, string> = {}
-) => {
-  const elem = document.createElementNS(namespace, name) as SVGElement;
-  Object.entries(props).forEach(([k, v]) => elem.setAttribute(k, v));
-  return elem;
-};
+import { show, hide, render } from "./render";
+import { Viewport, Constants } from "./constants";
+import { Key, State } from "./types";
+import { initialState } from "./state";
 
 /**
  * This is the function called on page load. Your main game loop
@@ -145,53 +61,8 @@ export function main() {
   /** Determines the rate of time steps */
   const tick$ = interval(Constants.TICK_RATE_MS);
 
-  /**
-   * Renders the current state to the canvas.
-   *
-   * In MVC terms, this updates the View using the Model.
-   *
-   * @param s Current state
-   */
-  const render = (s: State) => {
-    // Add blocks to the main grid canvas
-    const cube = createSvgElement(svg.namespaceURI, "rect", {
-      height: `${Block.HEIGHT}`,
-      width: `${Block.WIDTH}`,
-      x: "0",
-      y: "0",
-      style: "fill: green",
-    });
-    svg.appendChild(cube);
-    const cube2 = createSvgElement(svg.namespaceURI, "rect", {
-      height: `${Block.HEIGHT}`,
-      width: `${Block.WIDTH}`,
-      x: `${Block.WIDTH * (3 - 1)}`,
-      y: `${Block.HEIGHT * (20 - 1)}`,
-      style: "fill: red",
-    });
-    svg.appendChild(cube2);
-    const cube3 = createSvgElement(svg.namespaceURI, "rect", {
-      height: `${Block.HEIGHT}`,
-      width: `${Block.WIDTH}`,
-      x: `${Block.WIDTH * (4 - 1)}`,
-      y: `${Block.HEIGHT * (20 - 1)}`,
-      style: "fill: red",
-    });
-    svg.appendChild(cube3);
-
-    // Add a block to the preview canvas
-    const cubePreview = createSvgElement(preview.namespaceURI, "rect", {
-      height: `${Block.HEIGHT}`,
-      width: `${Block.WIDTH}`,
-      x: `${Block.WIDTH * 2}`,
-      y: `${Block.HEIGHT}`,
-      style: "fill: green",
-    });
-    preview.appendChild(cubePreview);
-  };
-
   const source$ = merge(tick$)
-    .pipe(scan((s: State) => ({ gameEnd: true }), initialState))
+    .pipe(scan((s: State, value: number) => ({ gameEnd: false, location: { x: 0, y: 0 } }), initialState))
     .subscribe((s: State) => {
       render(s);
 
