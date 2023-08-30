@@ -19,6 +19,9 @@ import { map, filter, scan } from "rxjs/operators";
 
 /** Constants */
 
+/**
+ * Determines the game's size
+ */
 const Viewport = {
   CANVAS_WIDTH: 200,
   CANVAS_HEIGHT: 400,
