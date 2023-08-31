@@ -59,10 +59,11 @@ export function main() {
   /** Observables */
 
   /** Determines the rate of time steps */
+  // editing state will be in the tick function
   const tick$ = interval(Constants.TICK_RATE_MS);
 
   const source$ = merge(tick$)
-    .pipe(scan((s: State, value: number) => ({ gameEnd: false, location: { x: 0, y: 0 } }), initialState))
+    .pipe(scan((s: State, value: number) => ({ gameEnd: false, location: { x: s.location.x, y: s.location.y } }), initialState))
     .subscribe((s: State) => {
       render(s);
 

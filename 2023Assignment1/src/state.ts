@@ -6,8 +6,8 @@ import { State } from "./types";
 export const initialState: State = {
   gameEnd: false,
   location: {
-    x: 0,
-    y: 0
+    x: 9,
+    y: 19
   },
 
 } as const;

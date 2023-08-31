@@ -29,8 +29,8 @@ const createSvgElement = (
    * Renders the current state to the canvas.
    *
    * In MVC terms, this updates the View using the Model.
-   *
-   * @param s Current state
+   * Render shows everything in the game state into the SVG canvas
+   * @param s Current state of the game that has everything
    */
 export const render = (s: State) => {
     // Going into HTML document looking for #svgCanvas quering the canvas for this element
@@ -42,30 +42,23 @@ export const render = (s: State) => {
     HTMLElement;
 
     // Add blocks to the main grid canvas 
-    const cube = createSvgElement(svg.namespaceURI, "rect", {
-      height: `${Block.HEIGHT}`,
-      width: `${Block.WIDTH}`,
-      x: "0",
-      y: "0",
-      style: "fill: green",
-    });
-    svg.appendChild(cube);
+    // const cube = createSvgElement(svg.namespaceURI, "rect", {
+    //   height: `${Block.HEIGHT}`,
+    //   width: `${Block.WIDTH}`,
+    //   x: "0",
+    //   y: "0",
+    //   style: "fill: green",
+    // });
+    // svg.appendChild(cube);
+    // how to make this  function to pass in x and y 
     const cube2 = createSvgElement(svg.namespaceURI, "rect", {
       height: `${Block.HEIGHT}`,
       width: `${Block.WIDTH}`,
-      x: `${Block.WIDTH * (3 - 1)}`,
-      y: `${Block.HEIGHT * (20 - 1)}`,
-      style: "fill: red",
+      x: `${Block.WIDTH * (s.location.x) }`,
+      y: `${Block.HEIGHT * (s.location.y)}`,
+      style: "fill: green",
     });
     svg.appendChild(cube2);
-    const cube3 = createSvgElement(svg.namespaceURI, "rect", {
-      height: `${Block.HEIGHT}`,
-      width: `${Block.WIDTH}`,
-      x: `${Block.WIDTH * (4 - 1)}`,
-      y: `${Block.HEIGHT * (20 - 1)}`,
-      style: "fill: red",
-    });
-    svg.appendChild(cube3);
 
     /**
      * Displays a SVG element on the canvas. Brings to foreground.
