@@ -14,7 +14,7 @@
 
 import "./style.css";
 
-import { fromEvent, interval, merge } from "rxjs";
+import { fromEvent, interval, merge, pipe } from "rxjs";
 import { map, filter, scan } from "rxjs/operators";
 
 /** Constants */
@@ -48,11 +48,74 @@ interface Action {
 }
 
 class moveLeft implements Action {
-  apply = (s:State) => {
-    // do calculations to move the tetris piece to the left
-    return { // everything here is the changes made to the state
-      ...s, // change the stuff relevant to our thing
-    }
+  apply = (s: State): State => {
+    // Fetch the active Tetrimino block
+    const activeBlock = s.listOfBlocks[0];
+
+    // Move each piece of the Tetrimino one unit to the left
+    const movedBlock: Tetrimino = {
+      component: activeBlock.component.map((piece) => ({
+        ...piece,
+        x: `${parseFloat(piece.x) - Block.WIDTH}`
+      })),
+    };
+
+    // Replace the active Tetrimino with the moved Tetrimino
+    const newListOfBlocks = [movedBlock, ...s.listOfBlocks.slice(1)];
+
+    // Return the new state
+    return {
+      ...s,
+      listOfBlocks: newListOfBlocks
+    };
+  }
+}
+
+class moveRight implements Action {
+  apply = (s: State): State => {
+    // Fetch the active Tetrimino block
+    const activeBlock = s.listOfBlocks[0];
+
+    // Move each piece of the Tetrimino one unit to the left
+    const movedBlock: Tetrimino = {
+      component: activeBlock.component.map((piece) => ({
+        ...piece,
+        x: `${parseFloat(piece.x) + Block.WIDTH}`
+      })),
+    };
+
+    // Replace the active Tetrimino with the moved Tetrimino
+    const newListOfBlocks = [movedBlock, ...s.listOfBlocks.slice(1)];
+
+    // Return the new state
+    return {
+      ...s,
+      listOfBlocks: newListOfBlocks
+    };
+  }
+}
+
+class moveDown implements Action {
+  apply = (s: State): State => {
+    // Fetch the active Tetrimino block
+    const activeBlock = s.listOfBlocks[0];
+
+    // Move each piece of the Tetrimino one unit to the left
+    const movedBlock: Tetrimino = {
+      component: activeBlock.component.map((piece) => ({
+        ...piece,
+        y: `${parseFloat(piece.y) + Block.HEIGHT}`
+      })),
+    };
+
+    // Replace the active Tetrimino with the moved Tetrimino
+    const newListOfBlocks = [movedBlock, ...s.listOfBlocks.slice(1)];
+
+    // Return the new state
+    return {
+      ...s,
+      listOfBlocks: newListOfBlocks
+    };
   }
 }
 
@@ -67,8 +130,8 @@ key$.pipe(
 );
 
 const left$ = fromKey("KeyA", "left").pipe(map(_=> new moveLeft()));
-const right$ = fromKey("KeyD", "right");
-const down$ = fromKey("KeyS", "down");
+const right$ = fromKey("KeyD", "right").pipe(map(_=> new moveRight()));
+const down$ = fromKey("KeyS", "down").pipe(map(_=> new moveDown()));
 const input$ = merge(left$, right$, down$);
 
 /** State processing */
@@ -129,7 +192,6 @@ const checkCollision = (activeBlock: Tetrimino): boolean => {
     return collisionDetected || (y + Block.HEIGHT >= Viewport.CANVAS_HEIGHT);
   }, false);
 };
-
 
 /**
  * Updates the state by proceeding with one time step.
@@ -225,11 +287,8 @@ export function main() {
     constructor() {}
   }
   
-  const tick$ = interval(10).pipe(map(() => new TickEvent()));
+  const tick$ = interval(300).pipe(map(() => new TickEvent()));
 
-
-  // 
-  const source$ = merge(input$, tick$);
   /**
    * Renders the current state to the canvas.
    *
@@ -260,18 +319,34 @@ export function main() {
   };
   
 
-
-  const source$ = merge(tick$)
-  .pipe(scan((s: State) => tick(s), initialState))
+  const source$ = merge(input$, tick$)
+  .pipe(
+    scan((s: State, action: Action | TickEvent) => 
+      action instanceof TickEvent ? tick(s) : action.apply(s),
+    initialState)
+  )
   .subscribe((s: State) => {
     render(s);
-
+  
     if (s.gameEnd) {
       show(gameover);
     } else {
       hide(gameover);
     }
   });
+
+
+  // const source$ = merge(input$, tick$)
+  // .pipe(scan((s: State) => tick(s), initialState))
+  // .subscribe((s: State) => {
+  //   render(s);
+
+  //   if (s.gameEnd) {
+  //     show(gameover);
+  //   } else {
+  //     hide(gameover);
+  //   }
+  // });
 
 }
 
