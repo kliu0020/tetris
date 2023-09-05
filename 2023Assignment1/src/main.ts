@@ -47,27 +47,42 @@ type Event = "keydown" | "keyup" | "keypress";
 
 /** State processing */
 
-type BlockState = Readonly<{
-  x: number;
-  y: number;
+// Everything in Piece needs to be a string
+type Piece = Readonly<{
+  x: string;
+  y: string;
   color: string;
+}>;
+
+type Tetrimino = Readonly<{
+  component: ReadonlyArray<Piece>
 }>;
 
 type State = Readonly<{
   gameEnd: boolean;
-  fallingBlock: BlockState;
+  listOfBlocks: ReadonlyArray<Tetrimino>
+  // have a list of all the blocks even the ones that stopped
 }>;
 
-const initialBlock: BlockState = {
-  x: 5, //Math.floor(Constants.GRID_HEIGHT / 2 ) -1 
-  y: 0,
-  color: 'green'
+const TwoByTwo: Tetrimino = {
+  component: [
+    {x: `${4* Block.WIDTH}`, y: `${Block.HEIGHT}`, color: 'green'},
+    {x: `${5* Block.WIDTH}`, y: `${Block.HEIGHT}`, color: 'green'},
+    {x: `${4* Block.WIDTH}`, y: `${2*Block.HEIGHT}`, color: 'green'},
+    {x: `${5* Block.WIDTH}`, y: `${2*Block.HEIGHT}`, color: 'green'}
+  ]
 }
 
 const initialState: State = {
   gameEnd: false,
-  fallingBlock: initialBlock,
+  listOfBlocks: [TwoByTwo]
 } as const;
+
+// const makesBlockFall: Piece = {
+//   x: 0,
+//   y: 0,
+//   color: 'green'
+// }
 
 /**
  * Updates the state by proceeding with one time step.
@@ -76,16 +91,9 @@ const initialState: State = {
  * @returns Updated state
  */
 // const tick = (s: State) => s;
+// create function that makes it fall down and put it in tick
 const tick = (s: State): State => {
-  if (s.fallingBlock) {
-    return {
-      ...s,
-      fallingBlock: {
-        ...s.fallingBlock,
-        y: s.fallingBlock.y + 1,
-      },
-    };
-  }
+  
   return s;
 };
 
