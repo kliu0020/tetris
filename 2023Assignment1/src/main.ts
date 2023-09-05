@@ -38,7 +38,6 @@ const Block = {
 };
 
 /** User input */
-type Action = 'TICK' | 'MOVE_LEFT' | 'MOVE_RIGHT' |'MOVE_DOWN';
 
 type Key = "KeyS" | "KeyA" | "KeyD";
 
@@ -48,19 +47,26 @@ type Event = "keydown" | "keyup" | "keypress";
 
 /** State processing */
 
-type Position = {
+type BlockState = Readonly<{
   x: number;
   y: number;
-};
+  color: string;
+}>;
 
 type State = Readonly<{
   gameEnd: boolean;
-  fallingBlock: Position; // Added: The falling block's position
+  fallingBlock: BlockState;
 }>;
+
+const initialBlock: BlockState = {
+  x: 5, //Math.floor(Constants.GRID_HEIGHT / 2 ) -1 
+  y: 0,
+  color: 'green'
+}
 
 const initialState: State = {
   gameEnd: false,
-  fallingBlock: { x: 5, y: 0 }, // Added: Initial position of the falling block
+  fallingBlock: initialBlock,
 } as const;
 
 /**
@@ -69,7 +75,19 @@ const initialState: State = {
  * @param s Current state
  * @returns Updated state
  */
-const tick$ = interval(Constants.TICK_RATE_MS).pipe(map(() => 'TICK' as Action));
+// const tick = (s: State) => s;
+const tick = (s: State): State => {
+  if (s.fallingBlock) {
+    return {
+      ...s,
+      fallingBlock: {
+        ...s.fallingBlock,
+        y: s.fallingBlock.y + 1,
+      },
+    };
+  }
+  return s;
+};
 
 
 /** Rendering (side effects) */
@@ -142,15 +160,14 @@ export function main() {
   const fromKey = (keyCode: Key) =>
     key$.pipe(filter(({ code }) => code === keyCode));
 
-  const left$ = fromKey("KeyA").pipe(map(() => 'MOVE_LEFT' as Action));
-  const right$ = fromKey("KeyD").pipe(map(() => 'MOVE_RIGHT' as Action));
-  const down$ = fromKey("KeyS").pipe(map(() => 'MOVE_DOWN' as Action));
+  const left$ = fromKey("KeyA");
+  const right$ = fromKey("KeyD");
+  const down$ = fromKey("KeyS");
 
-  const allEvent$ = merge(tick$, left$,right$,down$);
   /** Observables */
 
   /** Determines the rate of time steps */
-  const tick$ = interval(Constants.TICK_RATE_MS);
+  const tick$ = interval(Constants.TICK_RATE_MS).pipe(map(() => tick))
 
   /**
    * Renders the current state to the canvas.
@@ -160,34 +177,43 @@ export function main() {
    * @param s Current state
    */
   const render = (s: State) => {
-    // Clear previous SVG elements
 
-    
-    while (svg.firstChild) {
-      svg.removeChild(svg.firstChild);
-    }
+     // Clear the previous rendering
+  while (svg.lastChild) {
+    svg.removeChild(svg.lastChild);
+  }
 
-    const block = createSvgElement(svg.namespaceURI, "rect", {
+  const cube = createSvgElement(svg.namespaceURI, "rect", {
+    height: `${Block.HEIGHT}`,
+    width: `${Block.WIDTH}`,
+    x: `${Block.WIDTH * s.fallingBlock.x}`,
+    y: `${Block.HEIGHT * s.fallingBlock.y}`,
+    style: "fill: green",
+  });
+  svg.appendChild(cube);
+
+    const cubePreview = createSvgElement(preview.namespaceURI, "rect", {
       height: `${Block.HEIGHT}`,
       width: `${Block.WIDTH}`,
-      x: `${s.fallingBlock.x * Block.WIDTH}`,
-      y: `${s.fallingBlock.y * Block.HEIGHT}`,
+      x: `${Block.WIDTH * 2}`,
+      y: `${Block.HEIGHT}`,
       style: "fill: green",
     });
-    svg.appendChild(block);
+    preview.appendChild(cubePreview);
   };
-  
+
   const source$ = merge(tick$)
-  .pipe(scan((s: State) => tick(s), initialState)) // Modified: Update state with tick function
+  .pipe(scan((s: State) => tick(s), initialState))
   .subscribe((s: State) => {
     render(s);
 
-      if (s.gameEnd) {
-        show(gameover);
-      } else {
-        hide(gameover);
-      }
-    });
+    if (s.gameEnd) {
+      show(gameover);
+    } else {
+      hide(gameover);
+    }
+  });
+
 }
 
 // The following simply runs your main function on window load.  Make sure to leave it in place.
