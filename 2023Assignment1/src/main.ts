@@ -40,10 +40,36 @@ const Block = {
 /** User input */
 
 type Key = "KeyS" | "KeyA" | "KeyD";
-
+type Direction = "left" | "up" | "right" | "down";
 type Event = "keydown" | "keyup" | "keypress";
 
+interface Action {
+  apply(s: State): State;
+}
+
+class moveLeft implements Action {
+  apply = (s:State) => {
+    // do calculations to move the tetris piece to the left
+    return { // everything here is the changes made to the state
+      ...s, // change the stuff relevant to our thing
+    }
+  }
+}
+
+
 /** Utility functions */
+const key$ = fromEvent<KeyboardEvent>(document, "keydown");
+
+const fromKey = (keyCode: string, direction: Direction) =>
+key$.pipe(
+  filter(({ code }) => code === keyCode),
+  map(() => new InputEvent(direction))
+);
+
+const left$ = fromKey("KeyA", "left").pipe(map(_=> new moveLeft()));
+const right$ = fromKey("KeyD", "right");
+const down$ = fromKey("KeyS", "down");
+const input$ = merge(left$, right$, down$);
 
 /** State processing */
 
@@ -62,6 +88,7 @@ type State = Readonly<{
   gameEnd: boolean;
   listOfBlocks: ReadonlyArray<Tetrimino>
   // have a list of all the blocks even the ones that stopped
+  collisionDetected: boolean;
 }>;
 
 const TwoByTwo: Tetrimino = {
@@ -75,14 +102,34 @@ const TwoByTwo: Tetrimino = {
 
 const initialState: State = {
   gameEnd: false,
-  listOfBlocks: [TwoByTwo]
+  listOfBlocks: [TwoByTwo],
+  collisionDetected: false,
 } as const;
 
-// const makesBlockFall: Piece = {
-//   x: 0,
-//   y: 0,
-//   color: 'green'
+// maps a piece down y 
+const makeBlockFall = (tetrimino: Tetrimino): Tetrimino => {
+  const newComponent = tetrimino.component.map(piece => ({
+    ...piece,
+    y: `${parseInt(piece.y) + Block.HEIGHT}`
+  }));
+  return {
+    component: newComponent
+  };
+};
+
+// generates a new block
+// const generateNewBlock = () => {
+//   return TwoByTwo;
 // }
+
+// Function checks for collision on the floor
+const checkCollision = (activeBlock: Tetrimino): boolean => {
+  return activeBlock.component.reduce((collisionDetected, piece) => {
+    const y = parseFloat(piece.y);
+    return collisionDetected || (y + Block.HEIGHT >= Viewport.CANVAS_HEIGHT);
+  }, false);
+};
+
 
 /**
  * Updates the state by proceeding with one time step.
@@ -90,13 +137,20 @@ const initialState: State = {
  * @param s Current state
  * @returns Updated state
  */
-// const tick = (s: State) => s;
 // create function that makes it fall down and put it in tick
 const tick = (s: State): State => {
-  
-  return s;
+  const newListOfBlocks = s.listOfBlocks.map(makeBlockFall);
+  const activeBlock = s.listOfBlocks[0]; 
+  if (checkCollision(activeBlock)) {
+    return { 
+      ...s, collisionDetected: true 
+      };
+  }
+  return {
+    ...s,
+    listOfBlocks: newListOfBlocks
+  };
 };
-
 
 /** Rendering (side effects) */
 
@@ -163,20 +217,19 @@ export function main() {
 
   /** User input */
 
-  const key$ = fromEvent<KeyboardEvent>(document, "keypress");
-
-  const fromKey = (keyCode: Key) =>
-    key$.pipe(filter(({ code }) => code === keyCode));
-
-  const left$ = fromKey("KeyA");
-  const right$ = fromKey("KeyD");
-  const down$ = fromKey("KeyS");
-
   /** Observables */
 
   /** Determines the rate of time steps */
-  const tick$ = interval(Constants.TICK_RATE_MS).pipe(map(() => tick))
+  // const tick$ = interval(Constants.TICK_RATE_MS).pipe(map(() => tick))
+  class TickEvent {
+    constructor() {}
+  }
+  
+  const tick$ = interval(10).pipe(map(() => new TickEvent()));
 
+
+  // 
+  const source$ = merge(input$, tick$);
   /**
    * Renders the current state to the canvas.
    *
@@ -185,30 +238,28 @@ export function main() {
    * @param s Current state
    */
   const render = (s: State) => {
-
-     // Clear the previous rendering
-  while (svg.lastChild) {
-    svg.removeChild(svg.lastChild);
-  }
-
-  const cube = createSvgElement(svg.namespaceURI, "rect", {
-    height: `${Block.HEIGHT}`,
-    width: `${Block.WIDTH}`,
-    x: `${Block.WIDTH * s.fallingBlock.x}`,
-    y: `${Block.HEIGHT * s.fallingBlock.y}`,
-    style: "fill: green",
-  });
-  svg.appendChild(cube);
-
-    const cubePreview = createSvgElement(preview.namespaceURI, "rect", {
-      height: `${Block.HEIGHT}`,
-      width: `${Block.WIDTH}`,
-      x: `${Block.WIDTH * 2}`,
-      y: `${Block.HEIGHT}`,
-      style: "fill: green",
+    // Clear the previous rendering
+    while (svg.lastChild) {
+      svg.removeChild(svg.lastChild);
+    }
+  
+    s.listOfBlocks.forEach(tetrimino => {
+      tetrimino.component.forEach(piece => {
+        const cube = createSvgElement(svg.namespaceURI, "rect", {
+          height: `${Block.HEIGHT}`,
+          width: `${Block.WIDTH}`,
+          x: piece.x,
+          y: piece.y,
+          style: `fill: ${piece.color}`,
+        });
+        svg.appendChild(cube);
+      });
     });
-    preview.appendChild(cubePreview);
+  
+    // ... (other rendering logic)
   };
+  
+
 
   const source$ = merge(tick$)
   .pipe(scan((s: State) => tick(s), initialState))
