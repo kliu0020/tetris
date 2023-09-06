@@ -52,6 +52,9 @@ class moveLeft implements Action {
     // Fetch the active Tetrimino block
     const activeBlock = s.listOfBlocks[0];
 
+    if(checkCollision(activeBlock, "left")) {
+      return s; // Return the same state if collision detected
+    }
     // Move each piece of the Tetrimino one unit to the left
     const movedBlock: Tetrimino = {
       component: activeBlock.component.map((piece) => ({
@@ -76,6 +79,10 @@ class moveRight implements Action {
     // Fetch the active Tetrimino block
     const activeBlock = s.listOfBlocks[0];
 
+    if(checkCollision(activeBlock, "right")) {
+      return s; // Return the same state if collision detected
+    }
+
     // Move each piece of the Tetrimino one unit to the left
     const movedBlock: Tetrimino = {
       component: activeBlock.component.map((piece) => ({
@@ -99,6 +106,9 @@ class moveDown implements Action {
   apply = (s: State): State => {
     // Fetch the active Tetrimino block
     const activeBlock = s.listOfBlocks[0];
+    if(checkCollision(activeBlock, "down")) {
+      return s; // Return the same state if collision detected
+    }
 
     // Move each piece of the Tetrimino one unit to the left
     const movedBlock: Tetrimino = {
@@ -149,10 +159,12 @@ type Tetrimino = Readonly<{
 
 type State = Readonly<{
   gameEnd: boolean;
-  listOfBlocks: ReadonlyArray<Tetrimino>
-  // have a list of all the blocks even the ones that stopped
+  listOfBlocks: ReadonlyArray<Tetrimino>;
   collisionDetected: boolean;
+  generateNewBlock: false;
+  doneFallingBlocks: ReadonlyArray<Tetrimino>; // <-- New field
 }>;
+
 
 const TwoByTwo: Tetrimino = {
   component: [
@@ -167,6 +179,8 @@ const initialState: State = {
   gameEnd: false,
   listOfBlocks: [TwoByTwo],
   collisionDetected: false,
+  generateNewBlock: false,
+  doneFallingBlocks: [] // <-- Initialize with empty array
 } as const;
 
 // maps a piece down y 
@@ -181,17 +195,40 @@ const makeBlockFall = (tetrimino: Tetrimino): Tetrimino => {
 };
 
 // generates a new block
-// const generateNewBlock = () => {
-//   return TwoByTwo;
-// }
+const generateNewBlock = (): Tetrimino => {
+  return TwoByTwo;
+}
 
-// Function checks for collision on the floor
-const checkCollision = (activeBlock: Tetrimino): boolean => {
+const checkCollision = (activeBlock: Tetrimino, doneFallingBlocks: ReadonlyArray<Tetrimino>, direction: Direction = "down"): boolean => {
   return activeBlock.component.reduce((collisionDetected, piece) => {
     const y = parseFloat(piece.y);
-    return collisionDetected || (y + Block.HEIGHT >= Viewport.CANVAS_HEIGHT);
+    const x = parseFloat(piece.x);
+
+    // Check for floor collision
+    const floorCollision = (y + Block.HEIGHT >= Viewport.CANVAS_HEIGHT);
+
+    // Check for side collisions
+    const leftCollision = (direction === "left" && x - Block.WIDTH < 0);
+    const rightCollision = (direction === "right" && x + Block.WIDTH >= Viewport.CANVAS_WIDTH);
+
+    // Check for block collisions
+    const blockCollision = doneFallingBlocks.reduce((acc, tetrimino) => {
+      return acc || tetrimino.component.reduce((innerAcc, piece) => {
+        const otherX = parseFloat(piece.x);
+        const otherY = parseFloat(piece.y);
+        
+        const samePosition = (direction === "down" && x === otherX && y + Block.HEIGHT === otherY)
+          || (direction === "left" && y === otherY && x - Block.WIDTH === otherX)
+          || (direction === "right" && y === otherY && x + Block.WIDTH === otherX);
+
+        return innerAcc || samePosition;
+      }, false);
+    }, false);
+
+    return collisionDetected || floorCollision || leftCollision || rightCollision || blockCollision;
   }, false);
 };
+
 
 /**
  * Updates the state by proceeding with one time step.
@@ -201,16 +238,22 @@ const checkCollision = (activeBlock: Tetrimino): boolean => {
  */
 // create function that makes it fall down and put it in tick
 const tick = (s: State): State => {
-  const newListOfBlocks = s.listOfBlocks.map(makeBlockFall);
-  const activeBlock = s.listOfBlocks[0]; 
-  if (checkCollision(activeBlock)) {
-    return { 
-      ...s, collisionDetected: true 
-      };
+  const activeBlock = s.listOfBlocks[0];
+  if (checkCollision(activeBlock, s.doneFallingBlocks, "down")) {
+    const newBlock = generateNewBlock();
+    return {
+      ...s,
+      listOfBlocks: [newBlock],  // Only include the new block here
+      doneFallingBlocks: [...s.doneFallingBlocks, activeBlock], // <-- Add the collided block to doneFallingBlocks
+      collisionDetected: true
+    };
   }
+  
+  const newActiveBlock = makeBlockFall(activeBlock); // move only the active block down
   return {
     ...s,
-    listOfBlocks: newListOfBlocks
+    listOfBlocks: [newActiveBlock],  // Only include the new active block here
+    collisionDetected: false
   };
 };
 
@@ -277,17 +320,31 @@ export function main() {
   const scoreText = document.querySelector("#scoreText") as HTMLElement;
   const highScoreText = document.querySelector("#highScoreText") as HTMLElement;
 
-  /** User input */
-
-  /** Observables */
-
   /** Determines the rate of time steps */
-  // const tick$ = interval(Constants.TICK_RATE_MS).pipe(map(() => tick))
   class TickEvent {
     constructor() {}
   }
   
-  const tick$ = interval(300).pipe(map(() => new TickEvent()));
+  const tick$ = interval(100).pipe(map(() => new TickEvent()));
+
+/**
+ * Renders a Tetrimino piece on the SVG canvas.
+ *
+ * @param tetrimino Tetrimino to render
+ * @param svg SVG canvas element
+ */
+const renderTetrimino = (tetrimino: Tetrimino, svg: SVGGraphicsElement) => {
+  tetrimino.component.forEach(piece => {
+    const cube = createSvgElement(svg.namespaceURI, "rect", {
+      height: `${Block.HEIGHT}`,
+      width: `${Block.WIDTH}`,
+      x: piece.x,
+      y: piece.y,
+      style: `fill: ${piece.color}`,
+    });
+    svg.appendChild(cube);
+  });
+};
 
   /**
    * Renders the current state to the canvas.
@@ -301,24 +358,11 @@ export function main() {
     while (svg.lastChild) {
       svg.removeChild(svg.lastChild);
     }
-  
-    s.listOfBlocks.forEach(tetrimino => {
-      tetrimino.component.forEach(piece => {
-        const cube = createSvgElement(svg.namespaceURI, "rect", {
-          height: `${Block.HEIGHT}`,
-          width: `${Block.WIDTH}`,
-          x: piece.x,
-          y: piece.y,
-          style: `fill: ${piece.color}`,
-        });
-        svg.appendChild(cube);
-      });
-    });
-  
-    // ... (other rendering logic)
+    s.doneFallingBlocks.forEach(tetrimino => renderTetrimino(tetrimino, svg));
+    s.listOfBlocks.forEach(tetrimino => renderTetrimino(tetrimino, svg));
+
   };
   
-
   const source$ = merge(input$, tick$)
   .pipe(
     scan((s: State, action: Action | TickEvent) => 
@@ -334,19 +378,6 @@ export function main() {
       hide(gameover);
     }
   });
-
-
-  // const source$ = merge(input$, tick$)
-  // .pipe(scan((s: State) => tick(s), initialState))
-  // .subscribe((s: State) => {
-  //   render(s);
-
-  //   if (s.gameEnd) {
-  //     show(gameover);
-  //   } else {
-  //     hide(gameover);
-  //   }
-  // });
 
 }
 
