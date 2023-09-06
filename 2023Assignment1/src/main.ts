@@ -1,19 +1,4 @@
-/**
- * Inside this file you will use the classes and functions from rx.js
- * to add visuals to the svg element in index.html, animate them, and make them interactive.
- *
- * Study and complete the tasks in observable exercises first to get ideas.
- *
- * Course Notes showing Asteroids in FRP: https://tgdwyer.github.io/asteroids/
- *
- * You will be marked on your functional programming style
- * as well as the functionality that you implement.
- *
- * Document your code!
- */
-
 import "./style.css";
-
 import { fromEvent, interval, merge, pipe } from "rxjs";
 import { map, filter, scan } from "rxjs/operators";
 
@@ -38,6 +23,23 @@ const Block = {
 };
 
 /** User input */
+type Piece = Readonly<{
+  x: string;
+  y: string;
+  color: string;
+}>;
+
+type Tetrimino = Readonly<{
+  component: ReadonlyArray<Piece>
+}>;
+
+type State = Readonly<{
+  gameEnd: boolean;
+  listOfBlocks: ReadonlyArray<Tetrimino>;
+  collisionDetected: boolean;
+  generateNewBlock: boolean;
+  doneFallingBlocks: ReadonlyArray<Tetrimino>; // <-- New field
+}>;
 
 type Key = "KeyS" | "KeyA" | "KeyD";
 type Direction = "left" | "up" | "right" | "down";
@@ -46,89 +48,6 @@ type Event = "keydown" | "keyup" | "keypress";
 interface Action {
   apply(s: State): State;
 }
-
-class moveLeft implements Action {
-  apply = (s: State): State => {
-    // Fetch the active Tetrimino block
-    const activeBlock = s.listOfBlocks[0];
-
-    if(checkCollision(activeBlock, "left")) {
-      return s; // Return the same state if collision detected
-    }
-    // Move each piece of the Tetrimino one unit to the left
-    const movedBlock: Tetrimino = {
-      component: activeBlock.component.map((piece) => ({
-        ...piece,
-        x: `${parseFloat(piece.x) - Block.WIDTH}`
-      })),
-    };
-
-    // Replace the active Tetrimino with the moved Tetrimino
-    const newListOfBlocks = [movedBlock, ...s.listOfBlocks.slice(1)];
-
-    // Return the new state
-    return {
-      ...s,
-      listOfBlocks: newListOfBlocks
-    };
-  }
-}
-
-class moveRight implements Action {
-  apply = (s: State): State => {
-    // Fetch the active Tetrimino block
-    const activeBlock = s.listOfBlocks[0];
-
-    if(checkCollision(activeBlock, "right")) {
-      return s; // Return the same state if collision detected
-    }
-
-    // Move each piece of the Tetrimino one unit to the left
-    const movedBlock: Tetrimino = {
-      component: activeBlock.component.map((piece) => ({
-        ...piece,
-        x: `${parseFloat(piece.x) + Block.WIDTH}`
-      })),
-    };
-
-    // Replace the active Tetrimino with the moved Tetrimino
-    const newListOfBlocks = [movedBlock, ...s.listOfBlocks.slice(1)];
-
-    // Return the new state
-    return {
-      ...s,
-      listOfBlocks: newListOfBlocks
-    };
-  }
-}
-
-class moveDown implements Action {
-  apply = (s: State): State => {
-    // Fetch the active Tetrimino block
-    const activeBlock = s.listOfBlocks[0];
-    if(checkCollision(activeBlock, "down")) {
-      return s; // Return the same state if collision detected
-    }
-
-    // Move each piece of the Tetrimino one unit to the left
-    const movedBlock: Tetrimino = {
-      component: activeBlock.component.map((piece) => ({
-        ...piece,
-        y: `${parseFloat(piece.y) + Block.HEIGHT}`
-      })),
-    };
-
-    // Replace the active Tetrimino with the moved Tetrimino
-    const newListOfBlocks = [movedBlock, ...s.listOfBlocks.slice(1)];
-
-    // Return the new state
-    return {
-      ...s,
-      listOfBlocks: newListOfBlocks
-    };
-  }
-}
-
 
 /** Utility functions */
 const key$ = fromEvent<KeyboardEvent>(document, "keydown");
@@ -144,60 +63,6 @@ const right$ = fromKey("KeyD", "right").pipe(map(_=> new moveRight()));
 const down$ = fromKey("KeyS", "down").pipe(map(_=> new moveDown()));
 const input$ = merge(left$, right$, down$);
 
-/** State processing */
-
-// Everything in Piece needs to be a string
-type Piece = Readonly<{
-  x: string;
-  y: string;
-  color: string;
-}>;
-
-type Tetrimino = Readonly<{
-  component: ReadonlyArray<Piece>
-}>;
-
-type State = Readonly<{
-  gameEnd: boolean;
-  listOfBlocks: ReadonlyArray<Tetrimino>;
-  collisionDetected: boolean;
-  generateNewBlock: false;
-  doneFallingBlocks: ReadonlyArray<Tetrimino>; // <-- New field
-}>;
-
-
-const TwoByTwo: Tetrimino = {
-  component: [
-    {x: `${4* Block.WIDTH}`, y: `${Block.HEIGHT}`, color: 'green'},
-    {x: `${5* Block.WIDTH}`, y: `${Block.HEIGHT}`, color: 'green'},
-    {x: `${4* Block.WIDTH}`, y: `${2*Block.HEIGHT}`, color: 'green'},
-    {x: `${5* Block.WIDTH}`, y: `${2*Block.HEIGHT}`, color: 'green'}
-  ]
-}
-
-const initialState: State = {
-  gameEnd: false,
-  listOfBlocks: [TwoByTwo],
-  collisionDetected: false,
-  generateNewBlock: false,
-  doneFallingBlocks: [] // <-- Initialize with empty array
-} as const;
-
-// maps a piece down y 
-const makeBlockFall = (tetrimino: Tetrimino): Tetrimino => {
-  const newComponent = tetrimino.component.map(piece => ({
-    ...piece,
-    y: `${parseInt(piece.y) + Block.HEIGHT}`
-  }));
-  return {
-    component: newComponent
-  };
-};
-
-// generates a new block
-const generateNewBlock = (): Tetrimino => {
-  return TwoByTwo;
-}
 
 const checkCollision = (activeBlock: Tetrimino, doneFallingBlocks: ReadonlyArray<Tetrimino>, direction: Direction = "down"): boolean => {
   return activeBlock.component.reduce((collisionDetected, piece) => {
@@ -229,6 +94,120 @@ const checkCollision = (activeBlock: Tetrimino, doneFallingBlocks: ReadonlyArray
   }, false);
 };
 
+
+class moveLeft implements Action {
+  apply = (s: State): State => {
+    // Fetch the active Tetrimino block
+    const activeBlock = s.listOfBlocks[0];
+
+    if(checkCollision(activeBlock, s.doneFallingBlocks, "left")) {
+      return s; // Return the same state if collision detected
+    }
+    // Move each piece of the Tetrimino one unit to the left
+    const movedBlock: Tetrimino = {
+      component: activeBlock.component.map((piece) => ({
+        ...piece,
+        x: `${parseFloat(piece.x) - Block.WIDTH}`
+      })),
+    };
+
+    // Replace the active Tetrimino with the moved Tetrimino
+    const newListOfBlocks = [movedBlock, ...s.listOfBlocks.slice(1)];
+
+    // Return the new state
+    return {
+      ...s,
+      listOfBlocks: newListOfBlocks
+    };
+  }
+}
+
+class moveRight implements Action {
+  apply = (s: State): State => {
+    // Fetch the active Tetrimino block
+    const activeBlock = s.listOfBlocks[0];
+
+    if(checkCollision(activeBlock, s.doneFallingBlocks, "right")) {
+      return s; // Return the same state if collision detected
+    }
+
+    // Move each piece of the Tetrimino one unit to the left
+    const movedBlock: Tetrimino = {
+      component: activeBlock.component.map((piece) => ({
+        ...piece,
+        x: `${parseFloat(piece.x) + Block.WIDTH}`
+      })),
+    };
+
+    // Replace the active Tetrimino with the moved Tetrimino
+    const newListOfBlocks = [movedBlock, ...s.listOfBlocks.slice(1)];
+
+    // Return the new state
+    return {
+      ...s,
+      listOfBlocks: newListOfBlocks
+    };
+  }
+}
+
+class moveDown implements Action {
+  apply = (s: State): State => {
+    // Fetch the active Tetrimino block
+    const activeBlock = s.listOfBlocks[0];
+    if(checkCollision(activeBlock, s.doneFallingBlocks, "down")) {
+      return s; // Return the same state if collision detected
+    }
+
+    // Move each piece of the Tetrimino one unit to the left
+    const movedBlock: Tetrimino = {
+      component: activeBlock.component.map((piece) => ({
+        ...piece,
+        y: `${parseFloat(piece.y) + Block.HEIGHT}`
+      })),
+    };
+
+    // Replace the active Tetrimino with the moved Tetrimino
+    const newListOfBlocks = [movedBlock, ...s.listOfBlocks.slice(1)];
+
+    // Return the new state
+    return {
+      ...s,
+      listOfBlocks: newListOfBlocks
+    };
+  }
+}
+
+const makeBlockFall = (tetrimino: Tetrimino): Tetrimino => {
+  const newComponent = tetrimino.component.map(piece => ({
+    ...piece,
+    y: `${parseInt(piece.y) + Block.HEIGHT}`
+  }));
+  return {
+    component: newComponent
+  };
+};
+
+const TwoByTwo: Tetrimino = {
+  component: [
+    {x: `${4* Block.WIDTH}`, y: `${Block.HEIGHT}`, color: 'green'},
+    {x: `${5* Block.WIDTH}`, y: `${Block.HEIGHT}`, color: 'green'},
+    {x: `${4* Block.WIDTH}`, y: `${2*Block.HEIGHT}`, color: 'green'},
+    {x: `${5* Block.WIDTH}`, y: `${2*Block.HEIGHT}`, color: 'green'}
+  ]
+}
+
+const initialState: State = {
+  gameEnd: false,
+  listOfBlocks: [TwoByTwo],
+  collisionDetected: false,
+  generateNewBlock: false,
+  doneFallingBlocks: [] // <-- Initialize with empty array
+} as const;
+
+// generates a new block
+const generateNewBlock = (): Tetrimino => {
+  return TwoByTwo;
+}
 
 /**
  * Updates the state by proceeding with one time step.
@@ -295,6 +274,8 @@ const createSvgElement = (
   Object.entries(props).forEach(([k, v]) => elem.setAttribute(k, v));
   return elem;
 };
+
+
 
 /**
  * This is the function called on page load. Your main game loop
