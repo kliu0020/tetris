@@ -96,6 +96,8 @@ const checkCollision = (activeBlock: Tetrimino, doneFallingBlocks: ReadonlyArray
   }, false);
 };
 
+
+
 class moveLeft implements Action {
   apply = (s: State): State => {
     // Fetch the active Tetrimino block
@@ -275,12 +277,15 @@ const tick = (s: State): State => {
     const newBlock = generateNewBlock();
     const fullRows = findFullRows([...s.doneFallingBlocks, activeBlock]);
     const linesCleared = fullRows.size;
-    let newScore = s.score + linesCleared;
-    let newHighScore = Math.max(s.highScore, newScore);
+    const newScore = s.score + linesCleared;
+    const newHighScore = Math.max(s.highScore, newScore);
     const newDoneFallingBlocks = removeAndShiftRows([...s.doneFallingBlocks, activeBlock], fullRows);
+
+    const isGameOver = checkGameOver(activeBlock, s.doneFallingBlocks);
 
     return {
       ...s,
+      gameEnd: isGameOver,
       listOfBlocks: [newBlock],  // Only include the new block here
       doneFallingBlocks: newDoneFallingBlocks,
       collisionDetected: true,
@@ -395,13 +400,13 @@ const renderTetrimino = (tetrimino: Tetrimino, svg: SVGGraphicsElement) => {
    */
   const render = (s: State) => {
     // Clear the previous rendering
-    while (svg.lastChild) {
-      svg.removeChild(svg.lastChild);
-    }
+    const showGameOver = svg.querySelectorAll("rect:not(#gameOver rect)")
+    showGameOver.forEach(rect => rect.remove())
     s.doneFallingBlocks.forEach(tetrimino => renderTetrimino(tetrimino, svg));
     s.listOfBlocks.forEach(tetrimino => renderTetrimino(tetrimino, svg));
     scoreText.innerText = `${s.score}`;
     highScoreText.innerText = `${s.highScore}`;
+    
   };
   
   const source$ = merge(input$, tick$)
@@ -411,15 +416,14 @@ const renderTetrimino = (tetrimino: Tetrimino, svg: SVGGraphicsElement) => {
     initialState)
   )
   .subscribe((s: State) => {
-    render(s);
-  
+    
     if (s.gameEnd) {
       show(gameover);
     } else {
+      render(s);
       hide(gameover);
     }
   });
-
 }
 
 // The following simply runs your main function on window load.  Make sure to leave it in place.
