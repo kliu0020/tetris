@@ -209,6 +209,51 @@ const generateNewBlock = (): Tetrimino => {
   return TwoByTwo;
 }
 
+const findFullRows = (doneFallingBlocks: ReadonlyArray<Tetrimino>): Set<number> => {
+  const fullRows = new Set<number>();
+
+  for (let y = 0; y < Constants.GRID_HEIGHT; y++) {
+    let blockCount = 0;
+    for (const tetrimino of doneFallingBlocks) {
+      for (const piece of tetrimino.component) {
+        if (parseInt(piece.y) === y * Block.HEIGHT) {
+          blockCount++;
+        }
+      }
+    }
+    if (blockCount >= Constants.GRID_WIDTH) {
+      fullRows.add(y);
+    }
+  }
+
+  return fullRows;
+};
+
+const removeAndShiftRows = (doneFallingBlocks: ReadonlyArray<Tetrimino>, fullRows: Set<number>): ReadonlyArray<Tetrimino> => {
+  const newBlocks: Tetrimino[] = [];
+
+  doneFallingBlocks.forEach(tetrimino => {
+    let newComponent: Piece[] = [];
+    tetrimino.component.forEach(piece => {
+      const row = parseInt(piece.y) / Block.HEIGHT;
+      if (!fullRows.has(row)) {
+        let newRow = row;
+        Array.from(fullRows).forEach(fullRow => {
+          if (row < fullRow) newRow++;
+        });
+        newComponent.push({ ...piece, y: `${newRow * Block.HEIGHT}` });
+      }
+    });
+
+    if (newComponent.length > 0) {
+      newBlocks.push({ component: newComponent });
+    }
+  });
+
+  return newBlocks;
+};
+
+
 /**
  * Updates the state by proceeding with one time step.
  *
@@ -220,10 +265,13 @@ const tick = (s: State): State => {
   const activeBlock = s.listOfBlocks[0];
   if (checkCollision(activeBlock, s.doneFallingBlocks, "down")) {
     const newBlock = generateNewBlock();
+    const fullRows = findFullRows([...s.doneFallingBlocks, activeBlock]);
+    const newDoneFallingBlocks = removeAndShiftRows([...s.doneFallingBlocks, activeBlock], fullRows);
+    
     return {
       ...s,
       listOfBlocks: [newBlock],  // Only include the new block here
-      doneFallingBlocks: [...s.doneFallingBlocks, activeBlock], // <-- Add the collided block to doneFallingBlocks
+      doneFallingBlocks: newDoneFallingBlocks,
       collisionDetected: true
     };
   }
@@ -274,8 +322,6 @@ const createSvgElement = (
   Object.entries(props).forEach(([k, v]) => elem.setAttribute(k, v));
   return elem;
 };
-
-
 
 /**
  * This is the function called on page load. Your main game loop
