@@ -39,6 +39,8 @@ type State = Readonly<{
   collisionDetected: boolean;
   generateNewBlock: boolean;
   doneFallingBlocks: ReadonlyArray<Tetrimino>; // <-- New field
+  score: number;
+  highScore: number;
 }>;
 
 type Key = "KeyS" | "KeyA" | "KeyD";
@@ -93,7 +95,6 @@ const checkCollision = (activeBlock: Tetrimino, doneFallingBlocks: ReadonlyArray
     return collisionDetected || floorCollision || leftCollision || rightCollision || blockCollision;
   }, false);
 };
-
 
 class moveLeft implements Action {
   apply = (s: State): State => {
@@ -180,7 +181,7 @@ class moveDown implements Action {
 const makeBlockFall = (tetrimino: Tetrimino): Tetrimino => {
   const newComponent = tetrimino.component.map(piece => ({
     ...piece,
-    y: `${parseInt(piece.y) + Block.HEIGHT}`
+    y: `${parseInt(piece.y) + Block.HEIGHT }`
   }));
   return {
     component: newComponent
@@ -189,10 +190,10 @@ const makeBlockFall = (tetrimino: Tetrimino): Tetrimino => {
 
 const TwoByTwo: Tetrimino = {
   component: [
-    {x: `${4* Block.WIDTH}`, y: `${Block.HEIGHT}`, color: 'green'},
-    {x: `${5* Block.WIDTH}`, y: `${Block.HEIGHT}`, color: 'green'},
-    {x: `${4* Block.WIDTH}`, y: `${2*Block.HEIGHT}`, color: 'green'},
-    {x: `${5* Block.WIDTH}`, y: `${2*Block.HEIGHT}`, color: 'green'}
+    {x: `${4* Block.WIDTH}`, y: `${-2 * Block.HEIGHT}`, color: 'green'},
+    {x: `${5* Block.WIDTH}`, y: `${-2 *Block.HEIGHT}`, color: 'green'},
+    {x: `${4* Block.WIDTH}`, y: `${-1*Block.HEIGHT}`, color: 'green'},
+    {x: `${5* Block.WIDTH}`, y: `${-1*Block.HEIGHT}`, color: 'green'}
   ]
 }
 
@@ -201,7 +202,9 @@ const initialState: State = {
   listOfBlocks: [TwoByTwo],
   collisionDetected: false,
   generateNewBlock: false,
-  doneFallingBlocks: [] // <-- Initialize with empty array
+  doneFallingBlocks: [], // <-- Initialize with empty array
+  score: 0,
+  highScore: 0,
 } as const;
 
 // generates a new block
@@ -253,6 +256,10 @@ const removeAndShiftRows = (doneFallingBlocks: ReadonlyArray<Tetrimino>, fullRow
   return newBlocks;
 };
 
+const checkGameOver = (activeBlock: Tetrimino, doneFallingBlocks: ReadonlyArray<Tetrimino>): boolean => {
+  // Check if any part of the active block is in the top row
+  return activeBlock.component.some((piece) => parseInt(piece.y) < Block.HEIGHT);
+};
 
 /**
  * Updates the state by proceeding with one time step.
@@ -263,16 +270,22 @@ const removeAndShiftRows = (doneFallingBlocks: ReadonlyArray<Tetrimino>, fullRow
 // create function that makes it fall down and put it in tick
 const tick = (s: State): State => {
   const activeBlock = s.listOfBlocks[0];
+
   if (checkCollision(activeBlock, s.doneFallingBlocks, "down")) {
     const newBlock = generateNewBlock();
     const fullRows = findFullRows([...s.doneFallingBlocks, activeBlock]);
+    const linesCleared = fullRows.size;
+    let newScore = s.score + linesCleared;
+    let newHighScore = Math.max(s.highScore, newScore);
     const newDoneFallingBlocks = removeAndShiftRows([...s.doneFallingBlocks, activeBlock], fullRows);
-    
+
     return {
       ...s,
       listOfBlocks: [newBlock],  // Only include the new block here
       doneFallingBlocks: newDoneFallingBlocks,
-      collisionDetected: true
+      collisionDetected: true,
+      score: newScore,
+      highScore: newHighScore
     };
   }
   
@@ -387,7 +400,8 @@ const renderTetrimino = (tetrimino: Tetrimino, svg: SVGGraphicsElement) => {
     }
     s.doneFallingBlocks.forEach(tetrimino => renderTetrimino(tetrimino, svg));
     s.listOfBlocks.forEach(tetrimino => renderTetrimino(tetrimino, svg));
-
+    scoreText.innerText = `${s.score}`;
+    highScoreText.innerText = `${s.highScore}`;
   };
   
   const source$ = merge(input$, tick$)
