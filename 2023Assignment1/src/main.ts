@@ -1,6 +1,6 @@
 import "./style.css";
-import { fromEvent, interval, merge, pipe } from "rxjs";
-import { map, filter, scan } from "rxjs/operators";
+import { fromEvent, interval, merge, pipe, behav, BehaviorSubject, combineLatest } from "rxjs";
+import { map, filter, scan, switchMap } from "rxjs/operators";
 
 /** Constants */
 
@@ -38,14 +38,15 @@ type State = Readonly<{
   listOfBlocks: ReadonlyArray<Tetrimino>;
   collisionDetected: boolean;
   generateNewBlock: boolean;
-  doneFallingBlocks: ReadonlyArray<Tetrimino>; // <-- New field
+  fallenBlocks: ReadonlyArray<Tetrimino>; // <-- New field
   score: number;
   highScore: number;
   seed: number;
+  level: number;
 }>;
 
-type Key = "KeyS" | "KeyA" | "KeyD" | "KeyR";
-type Direction = "left" | "up" | "right" | "down" | "Restart";
+type Key = "KeyS" | "KeyA" | "KeyD" | "KeyR" | "KeyW" | "Space";
+type Direction = "left" | "up" | "right" | "down" | "Restart" | "hardDrop";
 type Event = "keydown" | "keyup" | "keypress";
 
 interface Action {
@@ -66,15 +67,14 @@ const right$ = fromKey("KeyD", "right").pipe(map(_=> new moveRight()));
 const down$ = fromKey("KeyS", "down").pipe(map(_=> new moveDown()));
 const restart$ = fromKey("KeyR", "Restart").pipe(map(_ => new restartGame()));
 const rotate$ = fromKey("KeyW", "up").pipe(map(_=> new rotate()));
-const input$ = merge(left$, right$, down$, restart$, rotate$);
-
-
+const hardDrop$ = fromKey("Space", "hardDrop").pipe(map(_ => new hardDrop()));
+const input$ = merge(left$, right$, down$, restart$, rotate$, hardDrop$);
 
 const processActions = (s: State, action: Action): State => {
   return action.apply(s);
 };
 
-const checkCollision = (activeBlock: Tetrimino, doneFallingBlocks: ReadonlyArray<Tetrimino>, direction: Direction = "down"): boolean => {
+const checkCollision = (activeBlock: Tetrimino, fallenBlocks: ReadonlyArray<Tetrimino>, direction: Direction = "down"): boolean => {
   return activeBlock.component.reduce((collisionDetected, piece) => {
     const y = parseFloat(piece.y);
     const x = parseFloat(piece.x);
@@ -87,7 +87,7 @@ const checkCollision = (activeBlock: Tetrimino, doneFallingBlocks: ReadonlyArray
     const rightCollision = (direction === "right" && x + Block.WIDTH >= Viewport.CANVAS_WIDTH);
 
     // Check for block collisions
-    const blockCollision = doneFallingBlocks.reduce((acc, tetrimino) => {
+    const blockCollision = fallenBlocks.reduce((acc, tetrimino) => {
       return acc || tetrimino.component.reduce((innerAcc, piece) => {
         const otherX = parseFloat(piece.x);
         const otherY = parseFloat(piece.y);
@@ -95,7 +95,6 @@ const checkCollision = (activeBlock: Tetrimino, doneFallingBlocks: ReadonlyArray
         const samePosition = (direction === "down" && x === otherX && y + Block.HEIGHT === otherY)
           || (direction === "left" && y === otherY && x - Block.WIDTH === otherX)
           || (direction === "right" && y === otherY && x + Block.WIDTH === otherX);
-
         return innerAcc || samePosition;
       }, false);
     }, false);
@@ -109,7 +108,7 @@ class moveLeft implements Action {
     // Fetch the active Tetrimino block
     const activeBlock = s.listOfBlocks[0];
 
-    if(checkCollision(activeBlock, s.doneFallingBlocks, "left")) {
+    if(checkCollision(activeBlock, s.fallenBlocks, "left")) {
       return s; // Return the same state if collision detected
     }
     // Move each piece of the Tetrimino one unit to the left
@@ -136,7 +135,7 @@ class moveRight implements Action {
     // Fetch the active Tetrimino block
     const activeBlock = s.listOfBlocks[0];
 
-    if(checkCollision(activeBlock, s.doneFallingBlocks, "right")) {
+    if(checkCollision(activeBlock, s.fallenBlocks, "right")) {
       return s; // Return the same state if collision detected
     }
 
@@ -163,7 +162,7 @@ class moveDown implements Action {
   apply = (s: State): State => {
     // Fetch the active Tetrimino block
     const activeBlock = s.listOfBlocks[0];
-    if(checkCollision(activeBlock, s.doneFallingBlocks, "down")) {
+    if(checkCollision(activeBlock, s.fallenBlocks, "down")) {
       return s; // Return the same state if collision detected
     }
 
@@ -202,6 +201,50 @@ class restartGame implements Action {
   }
 }
 
+class hardDrop implements Action {
+  apply = (s: State): State => {
+    const activeBlock = s.listOfBlocks[0];
+
+    // Calculate how much distance to drop
+    const dropDistance = calculateDropDistance(activeBlock, s.fallenBlocks);
+
+    // If dropDistance is zero, then it's already touching another block or the floor
+    if (dropDistance <= 0) {
+      return s;
+    }
+
+    const hardDroppedBlock: Tetrimino = {
+      component: activeBlock.component.map((piece) => ({
+        ...piece,
+        y: `${parseFloat(piece.y) + (Block.HEIGHT * dropDistance)}`
+      }))
+    };
+
+    const newListOfBlocks = [hardDroppedBlock, ...s.listOfBlocks.slice(1)];
+
+    return {
+      ...s,
+      listOfBlocks: newListOfBlocks
+    };
+  }
+}
+
+
+
+function calculateDropDistance(activeBlock: Tetrimino, fallenBlocks: ReadonlyArray<Tetrimino>, initialDistance: number = 0): number {
+  if (checkCollision(
+    { component: activeBlock.component.map(piece => ({
+        ...piece,
+        y: `${parseFloat(piece.y) + (Block.HEIGHT * initialDistance)}`
+      }))},
+    fallenBlocks, 
+    "down"
+  )) {
+    return initialDistance;
+  }
+  return calculateDropDistance(activeBlock, fallenBlocks, initialDistance + 1);
+}
+
 class rotate implements Action {
   apply = (s: State): State => {
     const activeBlock = s.listOfBlocks[0];
@@ -216,7 +259,7 @@ class rotate implements Action {
     };
 
     // Check for collisions with the rotated block
-    if(checkCollision(rotatedBlock, s.doneFallingBlocks)) {
+    if(checkCollision(rotatedBlock, s.fallenBlocks)) {
       return s; // Return the same state if collision detected
     }
 
@@ -231,7 +274,6 @@ class rotate implements Action {
   }
 }
 
-
 function findPivotForI(component: ReadonlyArray<Piece>): { x: number, y: number } {
   // Find the second piece in the "I" shaped Tetrimino.
   // Assumes the component array is sorted by y-coordinate.
@@ -242,7 +284,6 @@ function findPivotForI(component: ReadonlyArray<Piece>): { x: number, y: number 
     y: parseFloat(pivotPiece.y)
   };
 }
-
 
 function rotateTetrimino(component: ReadonlyArray<Piece>): Piece[] {
   const pivot = findPivotForI(component);  // Implement this function to find the pivot point
@@ -259,7 +300,6 @@ function rotateTetrimino(component: ReadonlyArray<Piece>): Piece[] {
     return { ...piece, x: `${newX}`, y: `${newY}` };
   });
 }
-
 
 const makeBlockFall = (tetrimino: Tetrimino): Tetrimino => {
   const newComponent = tetrimino.component.map(piece => ({
@@ -347,7 +387,6 @@ class RNG {
   constructor(initialSeed: number) {
     this.currentSeed = initialSeed;
   }
-
   /**
    * Generates the next seed value in the sequence.
    */
@@ -386,18 +425,19 @@ const initialState: State = {
   listOfBlocks: [T_Block],
   collisionDetected: false,
   generateNewBlock: false,
-  doneFallingBlocks: [], // <-- Initialize with empty array
+  fallenBlocks: [], // <-- Initialize with empty array
   score: 0,
   highScore: 0,
   seed: 0,
+  level: 1,
 } as const;
 
-const findFullRows = (doneFallingBlocks: ReadonlyArray<Tetrimino>): Set<number> => {
+const findFullRows = (fallenBlocks: ReadonlyArray<Tetrimino>): Set<number> => {
   const fullRows = new Set<number>();
 
   for (let y = 0; y < Constants.GRID_HEIGHT; y++) {
     let blockCount = 0;
-    for (const tetrimino of doneFallingBlocks) {
+    for (const tetrimino of fallenBlocks) {
       for (const piece of tetrimino.component) {
         if (parseInt(piece.y) === y * Block.HEIGHT) {
           blockCount++;
@@ -412,31 +452,30 @@ const findFullRows = (doneFallingBlocks: ReadonlyArray<Tetrimino>): Set<number> 
   return fullRows;
 };
 
-const removeAndShiftRows = (doneFallingBlocks: ReadonlyArray<Tetrimino>, fullRows: Set<number>): ReadonlyArray<Tetrimino> => {
-  const newBlocks: Tetrimino[] = [];
-
-  doneFallingBlocks.forEach(tetrimino => {
-    let newComponent: Piece[] = [];
-    tetrimino.component.forEach(piece => {
-      const row = parseInt(piece.y) / Block.HEIGHT;
-      if (!fullRows.has(row)) {
-        let newRow = row;
-        Array.from(fullRows).forEach(fullRow => {
-          if (row < fullRow) newRow++;
-        });
-        newComponent.push({ ...piece, y: `${newRow * Block.HEIGHT}` });
-      }
-    });
-
-    if (newComponent.length > 0) {
-      newBlocks.push({ component: newComponent });
-    }
-  });
-
-  return newBlocks;
+const removeAndShiftRows = (
+  fallenBlocks: ReadonlyArray<Tetrimino>,
+  fullRows: Set<number>
+): ReadonlyArray<Tetrimino> => {
+  return fallenBlocks.map(tetrimino => {
+    const newComponent = tetrimino.component
+      .filter(piece => {
+        const row = parseInt(piece.y) / Block.HEIGHT;
+        return !fullRows.has(row);
+      })
+      .map(piece => {
+        const row = parseInt(piece.y) / Block.HEIGHT;
+        const newRow = Array.from(fullRows).reduce(
+          (acc, fullRow) => (row < fullRow ? acc + 1 : acc),
+          row
+        );
+        return { ...piece, y: `${newRow * Block.HEIGHT}` };
+      });
+      
+    return { component: newComponent };
+  }).filter(tetrimino => tetrimino.component.length > 0);
 };
 
-const checkGameOver = (activeBlock: Tetrimino, doneFallingBlocks: ReadonlyArray<Tetrimino>): boolean => {
+const checkGameOver = (activeBlock: Tetrimino, fallenBlocks: ReadonlyArray<Tetrimino>): boolean => {
   // Check if any part of the active block is in the top row
   return activeBlock.component.some((piece) => parseInt(piece.y) < Block.HEIGHT);
 };
@@ -451,25 +490,30 @@ const checkGameOver = (activeBlock: Tetrimino, doneFallingBlocks: ReadonlyArray<
 const tick = (s: State): State => {
   const activeBlock = s.listOfBlocks[0];
 
-  if (checkCollision(activeBlock, s.doneFallingBlocks, "down")) {
+  if (checkCollision(activeBlock, s.fallenBlocks, "down")) {
     const [newBlock, newSeed] = generateNewBlock(s.seed);
-    const fullRows = findFullRows([...s.doneFallingBlocks, activeBlock]);
+    const fullRows = findFullRows([...s.fallenBlocks, activeBlock]);
     const linesCleared = fullRows.size;
     const newScore = s.score + linesCleared;
     const newHighScore = Math.max(s.highScore, newScore);
-    const newDoneFallingBlocks = removeAndShiftRows([...s.doneFallingBlocks, activeBlock], fullRows);
+    const newfallenBlocks = removeAndShiftRows([...s.fallenBlocks, activeBlock], fullRows);
 
-    const isGameOver = checkGameOver(activeBlock, s.doneFallingBlocks);
+    const newLevel = Math.floor(newScore / 2) + 1;
 
+    // Update the BehaviorSubject
+    level$.next(newLevel);
+
+    const isGameOver = checkGameOver(activeBlock, s.fallenBlocks);
     return {
       ...s,
       gameEnd: isGameOver,
       listOfBlocks: [newBlock],
       seed: newSeed,
-      doneFallingBlocks: newDoneFallingBlocks,
+      fallenBlocks: newfallenBlocks,
       collisionDetected: true,
       score: newScore,
-      highScore: newHighScore
+      highScore: newHighScore,
+      level: newLevel  // Update level
     };
   }
   
@@ -481,7 +525,6 @@ const tick = (s: State): State => {
   };
 };
 
-/** Rendering (side effects) */
 
 /**
  * Displays a SVG element on the canvas. Brings to foreground.
@@ -520,6 +563,8 @@ const createSvgElement = (
   return elem;
 };
 
+const level$ = new BehaviorSubject<number>(initialState.level); // starts at level 1
+
 /**
  * This is the function called on page load. Your main game loop
  * should be called here.
@@ -549,8 +594,16 @@ export function main() {
     constructor() {}
   }
   
-  const tick$ = interval(500).pipe(map(() => new TickEvent()));
+  const level$ = new BehaviorSubject<number>(1); // Initialize level at 1
 
+  const tick$ = level$.pipe(
+    switchMap((level: number) => {
+      const adjustedRate = Constants.TICK_RATE_MS - (level * 100);
+      return interval(adjustedRate);
+    }),
+    map(() => new TickEvent())
+  );
+  
 /**
  * Renders a Tetrimino piece on the SVG canvas.
  *
@@ -581,11 +634,11 @@ const renderTetrimino = (tetrimino: Tetrimino, svg: SVGGraphicsElement) => {
     // Clear the previous rendering
     const showGameOver = svg.querySelectorAll("rect:not(#gameOver rect)")
     showGameOver.forEach(rect => rect.remove())
-    s.doneFallingBlocks.forEach(tetrimino => renderTetrimino(tetrimino, svg));
+    s.fallenBlocks.forEach(tetrimino => renderTetrimino(tetrimino, svg));
     s.listOfBlocks.forEach(tetrimino => renderTetrimino(tetrimino, svg));
     scoreText.innerText = `${s.score}`;
     highScoreText.innerText = `${s.highScore}`;
-    
+    levelText.innerText = `${s.level}`;
   };
   
   const source$ = merge(input$, tick$)
