@@ -41,10 +41,11 @@ type State = Readonly<{
   doneFallingBlocks: ReadonlyArray<Tetrimino>; // <-- New field
   score: number;
   highScore: number;
+  seed: number;
 }>;
 
-type Key = "KeyS" | "KeyA" | "KeyD";
-type Direction = "left" | "up" | "right" | "down";
+type Key = "KeyS" | "KeyA" | "KeyD" | "KeyR";
+type Direction = "left" | "up" | "right" | "down" | "Restart";
 type Event = "keydown" | "keyup" | "keypress";
 
 interface Action {
@@ -63,6 +64,7 @@ key$.pipe(
 const left$ = fromKey("KeyA", "left").pipe(map(_=> new moveLeft()));
 const right$ = fromKey("KeyD", "right").pipe(map(_=> new moveRight()));
 const down$ = fromKey("KeyS", "down").pipe(map(_=> new moveDown()));
+// const restart$ = fromKey("KeyR", "Restart").pipe(map(_=> new initialState()));
 const input$ = merge(left$, right$, down$);
 
 
@@ -95,8 +97,6 @@ const checkCollision = (activeBlock: Tetrimino, doneFallingBlocks: ReadonlyArray
     return collisionDetected || floorCollision || leftCollision || rightCollision || blockCollision;
   }, false);
 };
-
-
 
 class moveLeft implements Action {
   apply = (s: State): State => {
@@ -190,29 +190,126 @@ const makeBlockFall = (tetrimino: Tetrimino): Tetrimino => {
   };
 };
 
-const TwoByTwo: Tetrimino = {
+const O_Block: Tetrimino = {
   component: [
-    {x: `${4* Block.WIDTH}`, y: `${-2 * Block.HEIGHT}`, color: 'green'},
-    {x: `${5* Block.WIDTH}`, y: `${-2 *Block.HEIGHT}`, color: 'green'},
-    {x: `${4* Block.WIDTH}`, y: `${-1*Block.HEIGHT}`, color: 'green'},
-    {x: `${5* Block.WIDTH}`, y: `${-1*Block.HEIGHT}`, color: 'green'}
+    {x: `${4* Block.WIDTH}`, y: `${-2 * Block.HEIGHT}`, color: '#8fffbf'},
+    {x: `${5* Block.WIDTH}`, y: `${-2 *Block.HEIGHT}`, color: '#8fffbf'},
+    {x: `${4* Block.WIDTH}`, y: `${-1 *Block.HEIGHT}`, color: '#8fffbf'},
+    {x: `${5* Block.WIDTH}`, y: `${-1 *Block.HEIGHT}`, color: '#8fffbf'}
   ]
+}
+
+const I_Block: Tetrimino = {
+  component: [
+    {x: `${6* Block.WIDTH}`, y: `${-1 * Block.HEIGHT}`, color: '#67dce4'},
+    {x: `${5* Block.WIDTH}`, y: `${-1 * Block.HEIGHT}`, color: '#67dce4'},
+    {x: `${4* Block.WIDTH}`, y: `${-1 * Block.HEIGHT}`, color: '#67dce4'},
+    {x: `${3* Block.WIDTH}`, y: `${-1 * Block.HEIGHT}`, color: '#67dce4'},
+  ]
+}
+
+const J_Block: Tetrimino = {
+  component: [
+    {x: `${6* Block.WIDTH}`, y: `${-1 * Block.HEIGHT}`, color: '#0037ff'},
+    {x: `${5* Block.WIDTH}`, y: `${-1 * Block.HEIGHT}`, color: '#0037ff'},
+    {x: `${4* Block.WIDTH}`, y: `${-1 * Block.HEIGHT}`, color: '#0037ff'},
+    {x: `${4* Block.WIDTH}`, y: `${-2 * Block.HEIGHT}`, color: '#0037ff'},
+  ]
+}
+
+const L_Block: Tetrimino = {
+  component: [
+    {x: `${6* Block.WIDTH}`, y: `${-1 * Block.HEIGHT}`, color: '#ffd48f'},
+    {x: `${5* Block.WIDTH}`, y: `${-1 * Block.HEIGHT}`, color: '#ffd48f'},
+    {x: `${4* Block.WIDTH}`, y: `${-1 * Block.HEIGHT}`, color: '#ffd48f'},
+    {x: `${6* Block.WIDTH}`, y: `${-2 * Block.HEIGHT}`, color: '#ffd48f'},
+  ]
+}
+
+const Z_Block: Tetrimino = {
+  component: [
+    {x: `${5* Block.WIDTH}`, y: `${-1 * Block.HEIGHT}`, color: '#f892d8'},
+    {x: `${4* Block.WIDTH}`, y: `${-1 * Block.HEIGHT}`, color: '#f892d8'},
+    {x: `${4* Block.WIDTH}`, y: `${-2 * Block.HEIGHT}`, color: '#f892d8'},
+    {x: `${3* Block.WIDTH}`, y: `${-2 * Block.HEIGHT}`, color: '#f892d8'},
+
+  ]
+}
+
+const S_Block: Tetrimino = {
+  component: [
+    {x: `${5* Block.WIDTH}`, y: `${-1 * Block.HEIGHT}`, color: '#ffd48f'},
+    {x: `${4* Block.WIDTH}`, y: `${-1 * Block.HEIGHT}`, color: '#ffd48f'},
+    {x: `${5* Block.WIDTH}`, y: `${-2 * Block.HEIGHT}`, color: '#ffd48f'},
+    {x: `${6* Block.WIDTH}`, y: `${-2 * Block.HEIGHT}`, color: '#ffd48f'},
+  ]
+}
+
+const T_Block: Tetrimino = {
+  component: [
+    {x: `${5* Block.WIDTH}`, y: `${-1 * Block.HEIGHT}`, color: '#c58fff'},
+    {x: `${4* Block.WIDTH}`, y: `${-1 * Block.HEIGHT}`, color: '#c58fff'},
+    {x: `${6* Block.WIDTH}`, y: `${-1 * Block.HEIGHT}`, color: '#c58fff'},
+    {x: `${5* Block.WIDTH}`, y: `${-2 * Block.HEIGHT}`, color: '#c58fff'},
+  ]
+}
+
+const AllBlocks: Tetrimino[] = [O_Block, I_Block, J_Block, L_Block, Z_Block, S_Block, T_Block];
+
+class RNG {
+  private static readonly MODULUS = 0x80000000; // 2**31
+  private static readonly MULTIPLIER = 1103515245;
+  private static readonly INCREMENT = 12345;
+
+  private currentSeed: number;
+
+  constructor(initialSeed: number) {
+    this.currentSeed = initialSeed;
+  }
+
+  /**
+   * Generates the next seed value in the sequence.
+   */
+  private generateNextSeed(): number {
+    this.currentSeed = (RNG.MULTIPLIER * this.currentSeed + RNG.INCREMENT) % RNG.MODULUS;
+    return this.currentSeed;
+  }
+
+  public getNextFloat(): [number, number] {
+    const nextSeed = this.generateNextSeed();
+    return [nextSeed / RNG.MODULUS, nextSeed];
+  }
+
+  public getNextInt(boundaryLower: number, boundaryUpper: number): [number, number] {
+    const [fraction, nextSeed] = this.getNextFloat();
+    return [Math.floor(boundaryLower + fraction * (boundaryUpper - boundaryLower)), nextSeed];
+  }
+}
+
+// Initialises the game state 
+const [initialBlock, seed1] = generateNewBlock(12345);  // Starting seed
+const [nextBlock, seed2] = generateNewBlock(seed1);
+
+function generateNewBlock(seedValue: number): [Tetrimino, number] {
+  const rng = new RNG(seedValue);
+  const [randomIndex, newSeed] = rng.getNextInt(0, AllBlocks.length);
+  const randomBlock = AllBlocks[randomIndex];
+
+  return [{
+      component: randomBlock.component
+  }, newSeed];
 }
 
 const initialState: State = {
   gameEnd: false,
-  listOfBlocks: [TwoByTwo],
+  listOfBlocks: [T_Block],
   collisionDetected: false,
   generateNewBlock: false,
   doneFallingBlocks: [], // <-- Initialize with empty array
   score: 0,
   highScore: 0,
+  seed: 1,
 } as const;
-
-// generates a new block
-const generateNewBlock = (): Tetrimino => {
-  return TwoByTwo;
-}
 
 const findFullRows = (doneFallingBlocks: ReadonlyArray<Tetrimino>): Set<number> => {
   const fullRows = new Set<number>();
@@ -274,7 +371,7 @@ const tick = (s: State): State => {
   const activeBlock = s.listOfBlocks[0];
 
   if (checkCollision(activeBlock, s.doneFallingBlocks, "down")) {
-    const newBlock = generateNewBlock();
+    const [newBlock, newSeed] = generateNewBlock(s.seed);
     const fullRows = findFullRows([...s.doneFallingBlocks, activeBlock]);
     const linesCleared = fullRows.size;
     const newScore = s.score + linesCleared;
@@ -286,7 +383,8 @@ const tick = (s: State): State => {
     return {
       ...s,
       gameEnd: isGameOver,
-      listOfBlocks: [newBlock],  // Only include the new block here
+      listOfBlocks: [newBlock],
+      seed: newSeed,
       doneFallingBlocks: newDoneFallingBlocks,
       collisionDetected: true,
       score: newScore,
