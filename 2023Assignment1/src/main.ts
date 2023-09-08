@@ -64,9 +64,15 @@ key$.pipe(
 const left$ = fromKey("KeyA", "left").pipe(map(_=> new moveLeft()));
 const right$ = fromKey("KeyD", "right").pipe(map(_=> new moveRight()));
 const down$ = fromKey("KeyS", "down").pipe(map(_=> new moveDown()));
-// const restart$ = fromKey("KeyR", "Restart").pipe(map(_=> new initialState()));
-const input$ = merge(left$, right$, down$);
+const restart$ = fromKey("KeyR", "Restart").pipe(map(_ => new restartGame()));
+const rotate$ = fromKey("KeyW", "up").pipe(map(_=> new rotate()));
+const input$ = merge(left$, right$, down$, restart$, rotate$);
 
+
+
+const processActions = (s: State, action: Action): State => {
+  return action.apply(s);
+};
 
 const checkCollision = (activeBlock: Tetrimino, doneFallingBlocks: ReadonlyArray<Tetrimino>, direction: Direction = "down"): boolean => {
   return activeBlock.component.reduce((collisionDetected, piece) => {
@@ -180,6 +186,81 @@ class moveDown implements Action {
   }
 }
 
+class restartGame implements Action {
+  apply(s: State): State {
+    if (s.gameEnd) {
+      const rng = new RNG(s.seed);
+      const newSeed = rng.generateNextSeed();
+
+      return {
+        ...initialState,
+        seed: newSeed,
+        highScore: s.highScore // retain high score
+      };
+    }
+    return s;
+  }
+}
+
+class rotate implements Action {
+  apply = (s: State): State => {
+    const activeBlock = s.listOfBlocks[0];
+    
+    // Deep clone the component array
+    const clonedComponent = JSON.parse(JSON.stringify(activeBlock.component));
+    const rotatedComponent = rotateTetrimino(clonedComponent);
+
+    // Create a rotated block to check for collisions
+    const rotatedBlock: Tetrimino = {
+      component: rotatedComponent
+    };
+
+    // Check for collisions with the rotated block
+    if(checkCollision(rotatedBlock, s.doneFallingBlocks)) {
+      return s; // Return the same state if collision detected
+    }
+
+    // Replace the active Tetrimino with the rotated Tetrimino
+    const newListOfBlocks = [rotatedBlock, ...s.listOfBlocks.slice(1)];
+
+    // Return the new state
+    return {
+      ...s,
+      listOfBlocks: newListOfBlocks
+    };
+  }
+}
+
+
+function findPivotForI(component: ReadonlyArray<Piece>): { x: number, y: number } {
+  // Find the second piece in the "I" shaped Tetrimino.
+  // Assumes the component array is sorted by y-coordinate.
+  const pivotPiece = component[1];
+
+  return {
+    x: parseFloat(pivotPiece.x),
+    y: parseFloat(pivotPiece.y)
+  };
+}
+
+
+function rotateTetrimino(component: ReadonlyArray<Piece>): Piece[] {
+  const pivot = findPivotForI(component);  // Implement this function to find the pivot point
+
+  return component.map(piece => {
+    // Assuming piece.x and piece.y are numbers
+    const x = parseFloat(piece.x);
+    const y = parseFloat(piece.y);
+
+    // Rotate around pivot
+    const newX = pivot.x + (y - pivot.y);
+    const newY = pivot.y - (x - pivot.x);
+
+    return { ...piece, x: `${newX}`, y: `${newY}` };
+  });
+}
+
+
 const makeBlockFall = (tetrimino: Tetrimino): Tetrimino => {
   const newComponent = tetrimino.component.map(piece => ({
     ...piece,
@@ -257,11 +338,11 @@ const T_Block: Tetrimino = {
 const AllBlocks: Tetrimino[] = [O_Block, I_Block, J_Block, L_Block, Z_Block, S_Block, T_Block];
 
 class RNG {
-  private static readonly MODULUS = 0x80000000; // 2**31
-  private static readonly MULTIPLIER = 1103515245;
-  private static readonly INCREMENT = 12345;
+  public static readonly MODULUS = 0x80000000; // 2**31
+  public static readonly MULTIPLIER = 123123;
+  public static readonly INCREMENT = 12345;
 
-  private currentSeed: number;
+  public currentSeed: number;
 
   constructor(initialSeed: number) {
     this.currentSeed = initialSeed;
@@ -270,7 +351,7 @@ class RNG {
   /**
    * Generates the next seed value in the sequence.
    */
-  private generateNextSeed(): number {
+  public generateNextSeed(): number {
     this.currentSeed = (RNG.MULTIPLIER * this.currentSeed + RNG.INCREMENT) % RNG.MODULUS;
     return this.currentSeed;
   }
@@ -308,7 +389,7 @@ const initialState: State = {
   doneFallingBlocks: [], // <-- Initialize with empty array
   score: 0,
   highScore: 0,
-  seed: 1,
+  seed: 0,
 } as const;
 
 const findFullRows = (doneFallingBlocks: ReadonlyArray<Tetrimino>): Set<number> => {
@@ -468,7 +549,7 @@ export function main() {
     constructor() {}
   }
   
-  const tick$ = interval(100).pipe(map(() => new TickEvent()));
+  const tick$ = interval(500).pipe(map(() => new TickEvent()));
 
 /**
  * Renders a Tetrimino piece on the SVG canvas.
